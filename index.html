@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coin-Operated Arcade Machine FSM</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            width: 100%;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .arcade-machine {
+            background: linear-gradient(145deg, #2d3748, #1a202c);
+            border-radius: 20px;
+            padding: 25px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            border: 4px solid #4a5568;
+        }
+
+        .screen {
+            background: #0a0e27;
+            border: 6px solid #2d3748;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: inset 0 5px 20px rgba(0,0,0,0.8);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .screen::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                rgba(255,255,255,0.03) 0px,
+                rgba(255,255,255,0.03) 2px,
+                transparent 2px,
+                transparent 4px
+            );
+            pointer-events: none;
+        }
+
+        .state-display {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+
+        .current-state {
+            font-size: 28px;
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 0 0 20px currentColor;
+            margin-bottom: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .state-description {
+            font-size: 13px;
+            color: #a0aec0;
+        }
+
+        .led-panel {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin: 20px 0;
+        }
+
+        .led {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 3px solid #2d3748;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .led::after {
+            content: '';
+            position: absolute;
+            top: 15%;
+            left: 25%;
+            width: 30%;
+            height: 30%;
+            background: rgba(255,255,255,0.3);
+            border-radius: 50%;
+        }
+
+        .led.red { background: #4a5568; }
+        .led.red.active { 
+            background: #fc0303;
+            box-shadow: 0 0 30px #fc0303, inset 0 0 10px rgba(255,255,255,0.5);
+        }
+
+        .led.yellow { background: #4a5568; }
+        .led.yellow.active { 
+            background: #ffd700;
+            box-shadow: 0 0 30px #ffd700, inset 0 0 10px rgba(255,255,255,0.5);
+        }
+
+        .led.green { background: #4a5568; }
+        .led.green.active { 
+            background: #00ff00;
+            box-shadow: 0 0 30px #00ff00, inset 0 0 10px rgba(255,255,255,0.5);
+        }
+
+        .timer-display {
+            background: #000;
+            color: #0f0;
+            font-size: 36px;
+            padding: 15px;
+            text-align: center;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            letter-spacing: 4px;
+            margin: 15px 0;
+            border: 2px solid #0f0;
+            box-shadow: 0 0 20px rgba(0,255,0,0.3);
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+        }
+
+        button {
+            padding: 15px 30px;
+            font-size: 14px;
+            font-weight: bold;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            font-family: 'Courier New', monospace;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+
+        button:active {
+            transform: translateY(2px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+
+        .coin-btn {
+            background: linear-gradient(145deg, #ffd700, #ffed4e);
+            color: #000;
+        }
+
+        .coin-btn:hover {
+            background: linear-gradient(145deg, #ffed4e, #ffd700);
+        }
+
+        .start-btn {
+            background: linear-gradient(145deg, #48bb78, #38a169);
+            color: white;
+        }
+
+        .start-btn:hover {
+            background: linear-gradient(145deg, #38a169, #48bb78);
+        }
+
+        .start-btn:disabled {
+            background: #4a5568;
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        .reset-btn {
+            background: linear-gradient(145deg, #f56565, #e53e3e);
+            color: white;
+        }
+
+        .reset-btn:hover {
+            background: linear-gradient(145deg, #e53e3e, #f56565);
+        }
+
+        .parameters {
+            background: rgba(255,255,255,0.05);
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+
+        .param-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 10px 0;
+            color: #e2e8f0;
+        }
+
+        .param-row label {
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .param-row input {
+            width: 70px;
+            padding: 6px;
+            background: #2d3748;
+            border: 2px solid #4a5568;
+            border-radius: 5px;
+            color: #fff;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+
+        .simulation-panel {
+            background: linear-gradient(145deg, #2d3748, #1a202c);
+            border-radius: 20px;
+            padding: 25px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            border: 4px solid #4a5568;
+        }
+
+        .fsm-diagram {
+            background: #0a0e27;
+            border: 6px solid #2d3748;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            min-height: 320px;
+            position: relative;
+        }
+
+        .state-node {
+            position: absolute;
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            background: #2d3748;
+            border: 3px solid #4a5568;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #a0aec0;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        .state-node.active {
+            background: #4c51bf;
+            border-color: #667eea;
+            color: #fff;
+            box-shadow: 0 0 40px rgba(102, 126, 234, 0.6);
+            transform: scale(1.1);
+        }
+
+        .state-node .state-name {
+            font-size: 11px;
+            margin-bottom: 4px;
+        }
+
+        .state-node .state-led-indicator {
+            font-size: 9px;
+        }
+
+        #idle { top: 15px; left: 50%; transform: translateX(-50%); }
+        #coin { top: 140px; left: 15px; }
+        #active { top: 140px; right: 15px; }
+        #over { bottom: 15px; left: 50%; transform: translateX(-50%); }
+
+        .state-node.active#idle { transform: translateX(-50%) scale(1.1); }
+        .state-node.active#over { transform: translateX(-50%) scale(1.1); }
+
+        .log-panel {
+            background: #000;
+            color: #0f0;
+            padding: 20px;
+            border-radius: 10px;
+            height: 300px;
+            overflow-y: auto;
+            font-size: 13px;
+            border: 3px solid #0f0;
+            box-shadow: 0 0 20px rgba(0,255,0,0.3);
+        }
+
+        .log-entry {
+            margin: 5px 0;
+            opacity: 0;
+            animation: fadeIn 0.3s forwards;
+        }
+
+        @keyframes fadeIn {
+            to { opacity: 1; }
+        }
+
+        .log-entry .timestamp {
+            color: #ffd700;
+        }
+
+        .title {
+            text-align: center;
+            color: #fff;
+            font-size: 28px;
+            margin-bottom: 30px;
+            text-shadow: 0 0 10px rgba(255,255,255,0.5);
+        }
+
+        svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .arrow {
+            stroke: #4a5568;
+            stroke-width: 2;
+            fill: none;
+            transition: stroke 0.3s;
+        }
+
+        .arrow.active {
+            stroke: #667eea;
+            stroke-width: 3;
+            animation: dash 1s linear infinite;
+        }
+
+        @keyframes dash {
+            to {
+                stroke-dashoffset: -20;
+            }
+        }
+
+        @media (max-width: 1200px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="arcade-machine">
+            <div class="title">🎮 ARCADE MACHINE FSM</div>
+            <div class="screen">
+                <div class="state-display">
+                    <div class="current-state" id="stateName">IDLE</div>
+                    <div class="state-description" id="stateDesc">Waiting for coin insertion...</div>
+                </div>
+                
+                <div class="led-panel">
+                    <div class="led red active" id="ledRed"></div>
+                    <div class="led yellow" id="ledYellow"></div>
+                    <div class="led green" id="ledGreen"></div>
+                </div>
+                
+                <div class="timer-display" id="timer">00:00</div>
+            </div>
+
+            <div class="controls">
+                <div class="button-group">
+                    <button class="coin-btn" id="coinBtn">💰 INSERT COIN</button>
+                    <button class="start-btn" id="startBtn" disabled>▶ START GAME</button>
+                </div>
+                <button class="reset-btn" id="resetBtn">🔄 RESET</button>
+
+                <div class="parameters">
+                    <h3 style="color: #fff; margin-bottom: 15px;">⚙️ FSM Parameters</h3>
+                    <div class="param-row">
+                        <label>Game Duration (sec):</label>
+                        <input type="number" id="gameDuration" value="30" min="1" max="120">
+                    </div>
+                    <div class="param-row">
+                        <label>Reset Delay (sec):</label>
+                        <input type="number" id="resetDelay" value="5" min="1" max="30">
+                    </div>
+                    <div class="param-row">
+                        <label>Clock Speed (ms):</label>
+                        <input type="number" id="clockSpeed" value="100" min="50" max="1000" step="50">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="simulation-panel">
+            <div class="title">📊 FSM STATE DIAGRAM</div>
+            <div class="fsm-diagram">
+                <svg id="arrows">
+                    <defs>
+                        <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                            <polygon points="0 0, 10 3, 0 6" fill="#4a5568" />
+                        </marker>
+                        <marker id="arrowhead-active" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                            <polygon points="0 0, 10 3, 0 6" fill="#667eea" />
+                        </marker>
+                    </defs>
+                </svg>
+                
+                <div class="state-node active" id="idle">
+                    <div class="state-name">IDLE</div>
+                    <div class="state-led-indicator">🔴 RED LED</div>
+                </div>
+                <div class="state-node" id="coin">
+                    <div class="state-name">COIN_INSERTED</div>
+                    <div class="state-led-indicator">🟡 YELLOW LED</div>
+                </div>
+                <div class="state-node" id="active">
+                    <div class="state-name">GAME_ACTIVE</div>
+                    <div class="state-led-indicator">🟢 GREEN LED</div>
+                </div>
+                <div class="state-node" id="over">
+                    <div class="state-name">GAME_OVER</div>
+                    <div class="state-led-indicator">🔴🟡🟢 ALL ON</div>
+                </div>
+            </div>
+
+            <div class="log-panel" id="logPanel">
+                <div class="log-entry"><span class="timestamp">[00:00]</span> === FSM Simulation Ready ===</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // FSM State Machine Implementation
+        const States = {
+            IDLE: 'IDLE',
+            COIN_INSERTED: 'COIN_INSERTED',
+            GAME_ACTIVE: 'GAME_ACTIVE',
+            GAME_OVER: 'GAME_OVER'
+        };
+
+        let currentState = States.IDLE;
+        let timer = 0;
+        let clockInterval = null;
+        let simulationTime = 0;
+
+        const elements = {
+            stateName: document.getElementById('stateName'),
+            stateDesc: document.getElementById('stateDesc'),
+            timer: document.getElementById('timer'),
+            ledRed: document.getElementById('ledRed'),
+            ledYellow: document.getElementById('ledYellow'),
+            ledGreen: document.getElementById('ledGreen'),
+            coinBtn: document.getElementById('coinBtn'),
+            startBtn: document.getElementById('startBtn'),
+            resetBtn: document.getElementById('resetBtn'),
+            logPanel: document.getElementById('logPanel'),
+            gameDuration: document.getElementById('gameDuration'),
+            resetDelay: document.getElementById('resetDelay'),
+            clockSpeed: document.getElementById('clockSpeed')
+        };
+
+        // State descriptions
+        const stateInfo = {
+            [States.IDLE]: {
+                name: 'IDLE',
+                desc: 'Waiting for coin insertion...',
+                color: '#fc0303'
+            },
+            [States.COIN_INSERTED]: {
+                name: 'COIN INSERTED',
+                desc: 'Coin detected! Press START to play',
+                color: '#ffd700'
+            },
+            [States.GAME_ACTIVE]: {
+                name: 'GAME ACTIVE',
+                desc: 'Game in progress!',
+                color: '#00ff00'
+            },
+            [States.GAME_OVER]: {
+                name: 'GAME OVER',
+                desc: 'Game finished! Resetting...',
+                color: '#fff'
+            }
+        };
+
+        function log(message) {
+            const time = formatTime(simulationTime);
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `<span class="timestamp">[${time}]</span> ${message}`;
+            elements.logPanel.appendChild(entry);
+            elements.logPanel.scrollTop = elements.logPanel.scrollHeight;
+        }
+
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+            const secs = (seconds % 60).toString().padStart(2, '0');
+            return `${mins}:${secs}`;
+        }
+
+        function updateDisplay() {
+            const info = stateInfo[currentState];
+            elements.stateName.textContent = info.name;
+            elements.stateName.style.color = info.color;
+            elements.stateDesc.textContent = info.desc;
+            elements.timer.textContent = formatTime(timer);
+
+            // Update LEDs based on state (Moore FSM - output depends only on state)
+            elements.ledRed.classList.remove('active');
+            elements.ledYellow.classList.remove('active');
+            elements.ledGreen.classList.remove('active');
+
+            switch(currentState) {
+                case States.IDLE:
+                    elements.ledRed.classList.add('active');
+                    break;
+                case States.COIN_INSERTED:
+                    elements.ledYellow.classList.add('active');
+                    break;
+                case States.GAME_ACTIVE:
+                    elements.ledGreen.classList.add('active');
+                    break;
+                case States.GAME_OVER:
+                    elements.ledRed.classList.add('active');
+                    elements.ledYellow.classList.add('active');
+                    elements.ledGreen.classList.add('active');
+                    break;
+            }
+
+            // Update state diagram
+            document.querySelectorAll('.state-node').forEach(node => {
+                node.classList.remove('active');
+            });
+            
+            const stateNodeMap = {
+                [States.IDLE]: 'idle',
+                [States.COIN_INSERTED]: 'coin',
+                [States.GAME_ACTIVE]: 'active',
+                [States.GAME_OVER]: 'over'
+            };
+            
+            document.getElementById(stateNodeMap[currentState]).classList.add('active');
+
+            // Update button states
+            elements.startBtn.disabled = currentState !== States.COIN_INSERTED;
+            elements.coinBtn.disabled = currentState !== States.IDLE;
+        }
+
+        function transitionTo(newState, reason) {
+            log(`State Transition: ${currentState} → ${newState} (${reason})`);
+            currentState = newState;
+            
+            if (newState === States.GAME_ACTIVE || newState === States.GAME_OVER) {
+                timer = 0;
+            }
+            
+            updateDisplay();
+        }
+
+        function clockTick() {
+            simulationTime++;
+            
+            switch(currentState) {
+                case States.GAME_ACTIVE:
+                    timer++;
+                    const gameDuration = parseInt(elements.gameDuration.value);
+                    if (timer >= gameDuration) {
+                        transitionTo(States.GAME_OVER, `Timer reached ${gameDuration}s`);
+                    }
+                    break;
+                    
+                case States.GAME_OVER:
+                    timer++;
+                    const resetDelay = parseInt(elements.resetDelay.value);
+                    if (timer >= resetDelay) {
+                        transitionTo(States.IDLE, `Reset delay of ${resetDelay}s elapsed`);
+                    }
+                    break;
+            }
+            
+            updateDisplay();
+        }
+
+        function startClock() {
+            if (clockInterval) clearInterval(clockInterval);
+            const speed = parseInt(elements.clockSpeed.value);
+            clockInterval = setInterval(clockTick, speed);
+            log(`Clock started at ${speed}ms interval`);
+        }
+
+        function stopClock() {
+            if (clockInterval) {
+                clearInterval(clockInterval);
+                clockInterval = null;
+            }
+        }
+
+        // Button event handlers
+        elements.coinBtn.addEventListener('click', () => {
+            if (currentState === States.IDLE) {
+                transitionTo(States.COIN_INSERTED, 'Coin detected');
+                log('💰 Coin inserted - binary: 3\'b001');
+            }
+        });
+
+        elements.startBtn.addEventListener('click', () => {
+            if (currentState === States.COIN_INSERTED) {
+                transitionTo(States.GAME_ACTIVE, 'Start button pressed');
+                log('▶ Game started');
+                startClock();
+            }
+        });
+
+        elements.resetBtn.addEventListener('click', () => {
+            stopClock();
+            currentState = States.IDLE;
+            timer = 0;
+            simulationTime = 0;
+            log('🔄 RESET signal activated');
+            log('State forced to IDLE');
+            updateDisplay();
+        });
+
+        // Parameter change handlers
+        elements.clockSpeed.addEventListener('change', () => {
+            if (clockInterval) {
+                startClock();
+            }
+        });
+
+        // Draw FSM arrows
+        function drawArrows() {
+            const svg = document.getElementById('arrows');
+            const arrows = [
+                { from: 'idle', to: 'coin', path: 'M 250 80 Q 150 130 140 180' },
+                { from: 'coin', to: 'active', path: 'M 140 240 Q 250 290 360 240' },
+                { from: 'active', to: 'over', path: 'M 420 300 Q 400 360 310 380' },
+                { from: 'over', to: 'idle', path: 'M 190 380 Q 100 280 190 140' }
+            ];
+
+            arrows.forEach((arrow, i) => {
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.setAttribute('d', arrow.path);
+                path.setAttribute('class', 'arrow');
+                path.setAttribute('marker-end', 'url(#arrowhead)');
+                path.setAttribute('stroke-dasharray', '5,5');
+                svg.appendChild(path);
+            });
+        }
+
+        // Initialize
+        drawArrows();
+        updateDisplay();
+        log('System initialized in IDLE state');
+        log('Waiting for coin input...');
+    </script>
+</body>
+</html>
